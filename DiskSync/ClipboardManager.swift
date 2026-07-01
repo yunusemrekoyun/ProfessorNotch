@@ -40,6 +40,7 @@ final class ClipboardManager {
     }
 
     private func poll() {
+        guard Preferences.shared.clipboardEnabled else { return }
         let pb = NSPasteboard.general
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount

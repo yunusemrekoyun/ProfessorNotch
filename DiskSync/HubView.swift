@@ -42,16 +42,34 @@ struct HubView: View {
     @Environment(AppState.self) private var app
     let model: NotchViewModel
     @State private var battery = BatteryManager.shared
+    @State private var prefs = Preferences.shared
+    @Environment(\.openSettings) private var openSettings
 
-    private var tab: HubTab { model.tab }
     /// Height of the physical notch band; tab icons sit within it (beside the
     /// notch) and the selected title drops just below it.
     var topInset: CGFloat = 0
     /// Center gap reserved for the physical notch between the two tab groups.
     var notchGap: CGFloat = 40
 
-    private var leftTabs: [HubTab] { Array(HubTab.allCases.prefix((HubTab.allCases.count + 1) / 2)) }
-    private var rightTabs: [HubTab] { Array(HubTab.allCases.suffix(HubTab.allCases.count / 2)) }
+    /// Tabs the user has enabled (Sync is core and always present).
+    private var visibleTabs: [HubTab] {
+        HubTab.allCases.filter { tab in
+            switch tab {
+            case .sync:       return true
+            case .nowPlaying: return prefs.showNowPlaying
+            case .battery:    return prefs.showBattery
+            case .apps:       return prefs.showLauncher
+            case .shelf:      return prefs.showShelf
+            case .system:     return prefs.showSystem
+            }
+        }
+    }
+
+    /// The effective selected tab — falls back if the chosen one was hidden.
+    private var tab: HubTab { visibleTabs.contains(model.tab) ? model.tab : (visibleTabs.first ?? .sync) }
+
+    private var leftTabs: [HubTab] { Array(visibleTabs.prefix((visibleTabs.count + 1) / 2)) }
+    private var rightTabs: [HubTab] { Array(visibleTabs.suffix(visibleTabs.count / 2)) }
 
     var body: some View {
         // The black shell + clipping is provided by NotchShell; this is pure content.
@@ -78,13 +96,37 @@ struct HubView: View {
                 ForEach(rightTabs) { tabButton($0) }
             }
             .frame(height: max(topInset, 34))
-            // Selected tab name, centered just below the notch.
-            Text(tab.title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            // Selected tab name centered under the notch, with an always-visible
+            // gear menu (Settings / Quit) pinned to the right.
+            ZStack {
+                Text(tab.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    settingsMenu
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
+    }
+
+    private var settingsMenu: some View {
+        Menu {
+            Button("Settings…") { openSettings() }
+            Divider()
+            Button("Quit ProfessorNotch") { NSApplication.shared.terminate(nil) }
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -142,29 +184,14 @@ struct HubView: View {
                 }
                 DriveCardView(app: app)
                 CloudStatusRow()
-                HStack {
-                    Button {
-                        app.syncNow()
-                    } label: {
-                        Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(!app.canSyncNow)
-
-                    SettingsLink {
-                        Image(systemName: "gearshape")
-                    }
-                    .buttonStyle(.glass)
-
-                    Button {
-                        NSApplication.shared.terminate(nil)
-                    } label: {
-                        Image(systemName: "power")
-                    }
-                    .buttonStyle(.glass)
-                    .help("Quit DiskSync")
+                Button {
+                    app.syncNow()
+                } label: {
+                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.glassProminent)
+                .disabled(!app.canSyncNow)
             }
             .padding(12)
         }

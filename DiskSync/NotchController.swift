@@ -214,7 +214,8 @@ final class NotchController {
             if hotRect.contains(location) { cancelHide() } else { scheduleHide() }
         } else if notchRect.contains(location) {
             cancelHide()
-            model.tab = .nowPlaying   // a plain hover always opens Media
+            // A plain hover opens Media (or Sync if the Media tab is hidden).
+            model.tab = Preferences.shared.showNowPlaying ? .nowPlaying : .sync
             expand()
         }
     }

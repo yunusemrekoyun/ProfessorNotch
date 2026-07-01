@@ -18,6 +18,7 @@ enum Haptics {
     static func action() { perform(.levelChange) }
 
     private static func perform(_ pattern: NSHapticFeedbackManager.FeedbackPattern) {
+        guard Preferences.shared.hapticsEnabled else { return }
         NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .default)
     }
 }

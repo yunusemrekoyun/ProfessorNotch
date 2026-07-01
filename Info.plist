@@ -11,9 +11,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>ProfessorNotch</string>
 	<key>CFBundleDisplayName</key>
-	<string>DiskSync</string>
+	<string>ProfessorNotch</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -26,9 +26,9 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>DiskSync — 100% local, offline folder mirroring.</string>
+	<string>ProfessorNotch — 100% local, offline folder mirroring &amp; notch hub.</string>
 	<!-- Needed to read/control Music & Spotify for the Now Playing panel. -->
 	<key>NSAppleEventsUsageDescription</key>
-	<string>DiskSync controls Music and Spotify to show and manage what's currently playing.</string>
+	<string>ProfessorNotch controls Music and Spotify to show and manage what's currently playing.</string>
 </dict>
 </plist>

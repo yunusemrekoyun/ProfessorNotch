@@ -14,8 +14,10 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralSettings(app: app)
+            NotchSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            GeneralSettings(app: app)
+                .tabItem { Label("Backup", systemImage: "externaldrive") }
             FoldersSettings(app: app)
                 .tabItem { Label("Folders", systemImage: "folder") }
             ExcludesSettings(app: app)
@@ -29,6 +31,44 @@ struct SettingsView: View {
         }
         .frame(width: 560, height: 460)
         .onAppear { NSApplication.shared.activate(ignoringOtherApps: true) }
+    }
+}
+
+// MARK: - General (app-wide notch hub preferences)
+
+private struct NotchSettings: View {
+    @State private var prefs = Preferences.shared
+
+    var body: some View {
+        Form {
+            Section("Notch tabs") {
+                Toggle("Now Playing", isOn: Binding(get: { prefs.showNowPlaying }, set: { prefs.showNowPlaying = $0 }))
+                Toggle("Battery", isOn: Binding(get: { prefs.showBattery }, set: { prefs.showBattery = $0 }))
+                Toggle("Apps (Launcher)", isOn: Binding(get: { prefs.showLauncher }, set: { prefs.showLauncher = $0 }))
+                Toggle("Shelf & Clipboard", isOn: Binding(get: { prefs.showShelf }, set: { prefs.showShelf = $0 }))
+                Toggle("System", isOn: Binding(get: { prefs.showSystem }, set: { prefs.showSystem = $0 }))
+                Text("Sync is always shown. Hidden tabs disappear from the notch.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Feedback") {
+                Toggle("Haptic feedback", isOn: Binding(get: { prefs.hapticsEnabled }, set: { prefs.hapticsEnabled = $0 }))
+            }
+
+            Section("Clipboard") {
+                Toggle("Keep clipboard history", isOn: Binding(get: { prefs.clipboardEnabled }, set: { prefs.clipboardEnabled = $0 }))
+                Button("Clear clipboard history") { ClipboardManager.shared.clear() }
+                Text("Password managers' concealed/one-time items are never stored.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Now Playing") {
+                Toggle("Download album art (network)", isOn: Binding(get: { prefs.artworkNetworkEnabled }, set: { prefs.artworkNetworkEnabled = $0 }))
+                Text("When off, everything stays offline; Spotify shows the app icon instead of cover art.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

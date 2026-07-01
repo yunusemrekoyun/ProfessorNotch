@@ -116,8 +116,8 @@ final class MediaController {
         guard key != lastArtKey else { return }
         lastArtKey = key
 
-        if artworkURL.hasPrefix("http"), let url = URL(string: artworkURL),
-           let data = await Self.downloadData(url) {
+        if artworkURL.hasPrefix("http"), Preferences.shared.artworkNetworkEnabled,
+           let url = URL(string: artworkURL), let data = await Self.downloadData(url) {
             guard lastArtKey == key else { return }   // track changed mid-download
             artwork = NSImage(data: data)
             return
