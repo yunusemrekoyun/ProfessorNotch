@@ -45,8 +45,8 @@ it to **Applications**.
 
 ### Build from source
 ```bash
-git clone https://github.com/<you>/ProfessorNotch.git
-cd ProfessorNotch
+git clone https://github.com/yunusemrekoyun/DiskSync.git
+cd DiskSync
 open DiskSync.xcodeproj
 ```
 In Xcode: select your team under **Signing & Capabilities**, then **⌘R**. The app is a

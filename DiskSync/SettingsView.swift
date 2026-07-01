@@ -346,17 +346,34 @@ private struct AboutSettings: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "externaldrive.fill.badge.timemachine")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.accentColor)
-            Text("DiskSync").font(.title2.weight(.semibold))
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .frame(width: 88, height: 88)
+            Text("ProfessorNotch").font(.title2.weight(.semibold))
             Text("Version \(version)").foregroundStyle(.secondary)
-            Text("One-way, additive mirroring to an external drive.")
-                .multilineTextAlignment(.center)
-            Label("100% local & offline — no networking, no telemetry.", systemImage: "lock.shield")
+            Text("A notch control-center with an offline folder-backup engine at its core.")
                 .font(.callout)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-                .padding(.top, 4)
+            Label("100% local — no telemetry.", systemImage: "lock.shield")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider().padding(.vertical, 6)
+
+            HStack(spacing: 12) {
+                Link(destination: URL(string: "https://github.com/yunusemrekoyun/DiskSync")!) {
+                    Label("Star on GitHub", systemImage: "star.fill")
+                }
+                Link(destination: URL(string: "https://www.yunusemrekoyun.com")!) {
+                    Label("Website", systemImage: "globe")
+                }
+            }
+            .buttonStyle(.bordered)
+
+            Text("Made with ♥ by Yunus Emre Koyun")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
