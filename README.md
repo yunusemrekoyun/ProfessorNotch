@@ -1,5 +1,10 @@
 # ProfessorNotch
 
+[![Latest release](https://img.shields.io/github/v/release/yunusemrekoyun/ProfessorNotch?sort=semver)](https://github.com/yunusemrekoyun/ProfessorNotch/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/yunusemrekoyun/ProfessorNotch/total)](https://github.com/yunusemrekoyun/ProfessorNotch/releases)
+[![Stars](https://img.shields.io/github/stars/yunusemrekoyun/ProfessorNotch?style=flat)](https://github.com/yunusemrekoyun/ProfessorNotch/stargazers)
+[![License: MIT](https://img.shields.io/github/license/yunusemrekoyun/ProfessorNotch)](LICENSE)
+
 A native macOS **notch control-center** that turns the MacBook notch into a small,
 glanceable hub — with a **100% local, offline folder-backup engine** at its core.
 Hover the notch and it drops down like Dynamic Island; drag a file onto it to stash
