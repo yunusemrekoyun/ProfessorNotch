@@ -233,10 +233,7 @@ struct ControlView: View {
         let on = tileOn(e)
         let enabled = (e == .wifi) ? net.wifiAvailable : net.bluetoothToggleable
         return HStack(spacing: 10) {
-            Toggle("", isOn: Binding(get: { on }, set: { setPower(e, $0) }))
-                .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: .green))   // green on, gray off
-                .disabled(!enabled)
+            PowerToggle(isOn: on, enabled: enabled) { setPower(e, $0) }
             Text(on ? "On" : "Off").font(.caption.weight(.medium)).foregroundStyle(.secondary)
             Spacer(minLength: 4)
             Button { openToggleSettings(e) } label: {
@@ -418,6 +415,34 @@ private extension View {
     @ViewBuilder
     func matched(_ id: String?, in ns: Namespace.ID) -> some View {
         if let id { matchedGeometryEffect(id: id, in: ns) } else { self }
+    }
+}
+
+/// A custom on/off switch with full color control (the system switch wouldn't
+/// take a green tint inside the notch panel): green track when on, gray when
+/// off, white knob that slides.
+struct PowerToggle: View {
+    let isOn: Bool
+    let enabled: Bool
+    let onChange: (Bool) -> Void
+
+    var body: some View {
+        Button { onChange(!isOn) } label: {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(isOn ? AnyShapeStyle(Color.green) : AnyShapeStyle(.white.opacity(0.22)))
+                    .frame(width: 40, height: 24)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 20, height: 20)
+                    .padding(2)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+            }
+            .animation(.snappy(duration: 0.2), value: isOn)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.55)
     }
 }
 
