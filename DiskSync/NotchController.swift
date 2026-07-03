@@ -26,6 +26,12 @@ final class NotchController {
     private var hideWorkItem: DispatchWorkItem?
     private var flashClearItem: DispatchWorkItem?
 
+    // Live Activities (Dynamic-Island-style collapsed-notch info).
+    private var downloadWatcher: FolderWatcher?
+    private var liveTask: Task<Void, Never>?
+    private let downloadsDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Downloads")
+
     // Geometry (screen coordinates, bottom-left origin — matches NSEvent.mouseLocation).
     private var notchRect: NSRect = .zero
     private var hotRect: NSRect = .zero
@@ -42,7 +48,6 @@ final class NotchController {
     }
 
     private func flashPower(_ plugged: Bool) {
-        guard window != nil else { return }   // nothing to show without a HUD window
         let battery = BatteryManager.shared
         let kind: FlashKind
         if !plugged {
@@ -55,13 +60,83 @@ final class NotchController {
             case .onBattery:          kind = .unplugged
             }
         }
-        // Replace any in-flight flash immediately and restart the dismiss timer.
-        model.flash = NotchFlash(kind: kind, level: battery.level)
+        showFlash(NotchFlash(kind: kind, level: battery.level))
         Haptics.event()   // tick when charger is (un)plugged
+    }
+
+    /// Show a transient flash (charge/volume/download) that overrides any live
+    /// activity for `duration`, then reverts.
+    private func showFlash(_ flash: NotchFlash, duration: TimeInterval = 2.8) {
+        guard window != nil else { return }   // nothing to show without a HUD window
+        model.flash = flash
         flashClearItem?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.model.flash = nil }
         flashClearItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.8, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
+    // MARK: - Live Activities
+
+    private func startLiveActivities() {
+        // Poll the media state slowly so the Now Playing pill can appear/leave
+        // even while the notch is collapsed (there is no public push for
+        // system playback). Gated by the preference so it can be turned off.
+        if liveTask == nil {
+            liveTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    let prefs = Preferences.shared
+                    if prefs.liveActivitiesEnabled, prefs.laNowPlaying {
+                        await MediaController.shared.refresh()
+                    }
+                    self?.updateActivity()
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
+        }
+        // Watch ~/Downloads for finished downloads.
+        if downloadWatcher == nil {
+            let watcher = FolderWatcher(paths: [downloadsDir.path], latency: 0.5, debounce: 1.0) { [weak self] changed in
+                Task { @MainActor in self?.handleDownloadChanges(changed) }
+            }
+            watcher.start()
+            downloadWatcher = watcher
+        }
+    }
+
+    /// Pick the persistent activity for the collapsed notch (priority order).
+    private func updateActivity() {
+        let prefs = Preferences.shared
+        guard prefs.liveActivitiesEnabled, !model.isExpanded else { model.activity = nil; return }
+        let media = MediaController.shared
+        if prefs.laNowPlaying, media.hasTrack, media.isPlaying {
+            model.activity = .nowPlaying
+        } else {
+            model.activity = nil
+        }
+    }
+
+    /// A batch of ~/Downloads changes arrived — flash the newest finished file.
+    private func handleDownloadChanges(_ changed: Set<String>) {
+        let prefs = Preferences.shared
+        guard prefs.liveActivitiesEnabled, prefs.laDownloads else { return }
+        let tempExt: Set<String> = ["crdownload", "download", "part", "tmp", "opdownload", "aria2"]
+        var best: (name: String, date: Date)?
+        let now = Date()
+        for path in changed {
+            let url = URL(fileURLWithPath: path)
+            guard url.deletingLastPathComponent().path == downloadsDir.path else { continue }  // top-level only
+            let name = url.lastPathComponent
+            if name.hasPrefix(".") || tempExt.contains(url.pathExtension.lowercased()) { continue }
+            guard let rv = try? url.resourceValues(forKeys: [.isRegularFileKey, .addedToDirectoryDateKey, .contentModificationDateKey]),
+                  rv.isRegularFile == true else { continue }
+            let added = rv.addedToDirectoryDate ?? rv.contentModificationDate ?? .distantPast
+            guard now.timeIntervalSince(added) < 15 else { continue }   // freshly landed
+            if best == nil || added > best!.date { best = (name, added) }
+        }
+        if let best {
+            showFlash(NotchFlash(kind: .download, text: best.name))
+            Haptics.event()
+        }
     }
 
     // MARK: - Install
@@ -89,6 +164,7 @@ final class NotchController {
         buildWindow(metrics: metrics)
         buildDropWindow(metrics: metrics)
         startMouseMonitors()
+        startLiveActivities()
     }
 
     private func rebuild() {
@@ -101,6 +177,7 @@ final class NotchController {
         dropWindow = nil
         model.isExpanded = false
         model.flash = nil
+        model.activity = nil
         install()
     }
 
@@ -246,6 +323,7 @@ final class NotchController {
         guard model.isExpanded else { return }
         model.isExpanded = false
         window?.ignoresMouseEvents = true    // click-through again
+        updateActivity()                     // show the live pill again right away
     }
 
     private func scheduleHide() {

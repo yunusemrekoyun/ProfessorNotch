@@ -39,6 +39,16 @@ final class Preferences {
     /// Allow downloading album art over the network (Spotify). Off ⇒ fully offline.
     var artworkNetworkEnabled: Bool { didSet { store.set(artworkNetworkEnabled, forKey: "pref.artworkNetwork") } }
 
+    // Live Activities — Dynamic-Island-style live info in the collapsed notch.
+    var liveActivitiesEnabled: Bool { didSet { store.set(liveActivitiesEnabled, forKey: "pref.liveActivities") } }
+    var laNowPlaying: Bool { didSet { store.set(laNowPlaying, forKey: "pref.la.nowPlaying") } }
+    var laTimer: Bool      { didSet { store.set(laTimer, forKey: "pref.la.timer") } }
+    var laVolumeHUD: Bool  { didSet { store.set(laVolumeHUD, forKey: "pref.la.volume") } }
+    var laDownloads: Bool  { didSet { store.set(laDownloads, forKey: "pref.la.downloads") } }
+
+    /// Whether a specific live activity should show (master switch AND its own).
+    func liveActivity(_ on: Bool) -> Bool { liveActivitiesEnabled && on }
+
     private init() {
         // didSet does not fire for assignments in init, so no write-back here.
         // Use a local reference (not self.store) since self isn't ready yet.
@@ -64,5 +74,11 @@ final class Preferences {
         // Off by default so a stock install is fully offline until the user
         // explicitly opts in (honors the "100% local & offline" promise).
         artworkNetworkEnabled = flag("pref.artworkNetwork", default: false)
+        // Live Activities — on by default, each individually toggleable.
+        liveActivitiesEnabled = flag("pref.liveActivities")
+        laNowPlaying = flag("pref.la.nowPlaying")
+        laTimer = flag("pref.la.timer")
+        laVolumeHUD = flag("pref.la.volume")
+        laDownloads = flag("pref.la.downloads")
     }
 }

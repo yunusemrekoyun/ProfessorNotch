@@ -59,6 +59,21 @@ private struct NotchSettings: View {
                 }
             }
 
+            Section("Live Activities") {
+                Toggle("Show live activities in the notch", isOn: Binding(
+                    get: { prefs.liveActivitiesEnabled }, set: { prefs.liveActivitiesEnabled = $0 }))
+                Group {
+                    Toggle("Now Playing", isOn: Binding(get: { prefs.laNowPlaying }, set: { prefs.laNowPlaying = $0 }))
+                    Toggle("Timer", isOn: Binding(get: { prefs.laTimer }, set: { prefs.laTimer = $0 }))
+                    Toggle("Volume", isOn: Binding(get: { prefs.laVolumeHUD }, set: { prefs.laVolumeHUD = $0 }))
+                    Toggle("Downloads", isOn: Binding(get: { prefs.laDownloads }, set: { prefs.laDownloads = $0 }))
+                }
+                .disabled(!prefs.liveActivitiesEnabled)
+                .padding(.leading, 12)
+                Text("Dynamic-Island-style info shown in the collapsed notch — music, a timer, volume changes, and finished downloads.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Feedback") {
                 Picker("Haptics", selection: Binding(
                     get: { prefs.hapticLevel }, set: { prefs.hapticLevel = $0 })) {

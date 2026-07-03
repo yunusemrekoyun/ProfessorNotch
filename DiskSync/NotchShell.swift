@@ -1,11 +1,12 @@
 //
 //  NotchShell.swift
-//  DiskSync
+//  ProfessorNotch
 //
 //  The Dynamic-Island-style shell: a black rounded panel that grows out of the
-//  notch with a spring when expanded, and shrinks back to exactly the notch
-//  size (so it blends invisibly with the real notch) when collapsed. Hosts the
-//  SwiftUI HubView and adds Liquid Glass accents.
+//  notch with a spring when expanded, shrinks to a slim sideways pill for a
+//  live activity (now playing / timer) or a transient flash (charge, volume,
+//  download), and back to exactly the notch size when idle. Hosts HubView when
+//  expanded.
 //
 
 import SwiftUI
@@ -18,17 +19,22 @@ struct NotchGeometry: Equatable {
     var notchHeight: CGFloat
 }
 
-/// Drives the open/closed animation. Toggled by `NotchController`, observed by
-/// SwiftUI so the spring runs on the main thread inside the view.
-/// The kind of power event the notch is announcing.
+/// A transient notice the notch flashes (charge / volume / download), overriding
+/// any persistent activity for a couple of seconds.
 nonisolated enum FlashKind: Sendable, Equatable {
     case charging, charged, pluggedNotCharging, unplugged
+    case volume, download
 }
 
-/// A brief power notice shown by the notch (e.g. "Charging 80%").
 nonisolated struct NotchFlash: Equatable, Sendable {
     var kind: FlashKind
-    var level: Int
+    var level: Int = 0      // charge % or volume %
+    var text: String = ""   // e.g. a downloaded file name
+}
+
+/// A persistent live activity shown in the collapsed notch as a slim pill.
+nonisolated enum LiveActivityKind: Sendable, Equatable {
+    case nowPlaying, timer
 }
 
 @MainActor
@@ -38,8 +44,10 @@ final class NotchViewModel {
     /// Selected tab — kept here (not in HubView's @State) so it survives the
     /// panel collapsing/reopening, e.g. mid file-drag.
     var tab: HubTab = .nowPlaying
-    /// When set, the notch briefly drops open to show a power notice.
+    /// A brief notice (charge/volume/download) — overrides `activity` while set.
     var flash: NotchFlash?
+    /// A persistent live activity (now playing / running timer) shown collapsed.
+    var activity: LiveActivityKind?
 }
 
 struct NotchShell: View {
@@ -50,11 +58,13 @@ struct NotchShell: View {
     var body: some View {
         let isFull = model.isExpanded
         let isFlash = model.flash != nil && !isFull
-        let expanded = isFull || isFlash
+        let isActivity = model.activity != nil && !isFull && !isFlash
+        let slim = isFlash || isActivity
+        let expanded = isFull || slim
 
-        // Full panel = rounded card; charging flash = a slim wide pill that only
-        // grows sideways (not down); collapsed = notch size.
-        let bottomRadius: CGFloat = isFull ? 26 : (isFlash ? 16 : 10)
+        // Full panel = rounded card; slim pill = a wide bar that only grows
+        // sideways (stays at notch height); idle = notch size.
+        let bottomRadius: CGFloat = isFull ? 26 : (slim ? 16 : 10)
         let shape = UnevenRoundedRectangle(
             topLeadingRadius: 0,
             bottomLeadingRadius: bottomRadius,
@@ -63,22 +73,26 @@ struct NotchShell: View {
             style: .continuous
         )
 
+        // Flashes get a wider bar (they carry a label); activities are slimmer.
         let flashWidth = min(geometry.panelWidth, geometry.notchWidth + 200)
-        let flashHeight = geometry.notchHeight + 6      // stays at notch level
+        let activityWidth = min(geometry.panelWidth, geometry.notchWidth + 132)
+        let slimWidth = isFlash ? flashWidth : activityWidth
+        let slimHeight = geometry.notchHeight + 6
 
-        let width = isFull ? geometry.panelWidth : (isFlash ? flashWidth : geometry.notchWidth)
-        let height = isFull ? geometry.panelHeight : (isFlash ? flashHeight : geometry.notchHeight)
-        // One combined state drives the geometry so a single spring runs (two
-        // separate .animation(value:) modifiers would fight over the frame).
-        let sizeState = isFull ? 2 : (isFlash ? 1 : 0)
+        let width = isFull ? geometry.panelWidth : (slim ? slimWidth : geometry.notchWidth)
+        let height = isFull ? geometry.panelHeight : (slim ? slimHeight : geometry.notchHeight)
+        // One combined state drives the geometry so a single spring runs.
+        let sizeState = isFull ? 2 : (slim ? 1 : 0)
 
         return ZStack(alignment: .top) {
             shape.fill(.black)
-            if isFlash, let flash = model.flash {
-                FlashView(flash: flash, notchWidth: geometry.notchWidth)
-            } else if isFull {
+            if isFull {
                 HubView(model: model, topInset: geometry.notchHeight, notchGap: geometry.notchWidth)
                     .environment(app)
+            } else if isFlash, let flash = model.flash {
+                FlashView(flash: flash, notchWidth: geometry.notchWidth)
+            } else if isActivity, let activity = model.activity {
+                NotchActivityView(kind: activity, notchWidth: geometry.notchWidth)
             }
         }
         .frame(width: width, height: height)
@@ -92,9 +106,10 @@ struct NotchShell: View {
     }
 }
 
-/// Slim power notice shown when the charger is (un)plugged: a colored icon +
-/// label to the left of the notch and the charge % to the right. Grows only
-/// sideways, and its color/icon make the state obvious at a glance.
+// MARK: - Flash (transient notice)
+
+/// Slim notice to the sides of the notch: a colored icon + label on the left and
+/// a value (charge/volume %) or file name on the right.
 struct FlashView: View {
     let flash: NotchFlash
     let notchWidth: CGFloat
@@ -104,6 +119,8 @@ struct FlashView: View {
         case .charging, .charged:   return .green
         case .pluggedNotCharging:   return .yellow
         case .unplugged:            return .orange
+        case .volume:               return .white
+        case .download:             return .blue
         }
     }
 
@@ -113,7 +130,16 @@ struct FlashView: View {
         case .charged:            return "bolt.badge.checkmark.fill"
         case .pluggedNotCharging: return "powerplug.fill"
         case .unplugged:          return "bolt.slash.fill"
+        case .volume:             return volumeSymbol
+        case .download:           return "arrow.down.circle.fill"
         }
+    }
+
+    private var volumeSymbol: String {
+        if flash.level <= 0 { return "speaker.slash.fill" }
+        if flash.level < 34 { return "speaker.wave.1.fill" }
+        if flash.level < 67 { return "speaker.wave.2.fill" }
+        return "speaker.wave.3.fill"
     }
 
     private var label: String {
@@ -122,7 +148,13 @@ struct FlashView: View {
         case .charged:            return "Charged"
         case .pluggedNotCharging: return "Plugged In"
         case .unplugged:          return "On Battery"
+        case .volume:             return "Volume"
+        case .download:           return "Downloaded"
         }
+    }
+
+    private var rightText: String {
+        flash.kind == .download ? flash.text : "\(flash.level)%"
     }
 
     var body: some View {
@@ -139,18 +171,110 @@ struct FlashView: View {
             }
             .frame(maxWidth: .infinity)
 
-            Spacer().frame(width: notchWidth)   // reserve the physical notch
+            Spacer().frame(width: notchWidth)
 
-            Text("\(flash.level)%")
-                .font(.system(size: 13, weight: .bold))
+            Text(rightText)
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 12)
         .frame(maxHeight: .infinity)
-        .background(tint.opacity(0.18))          // subtle colored glow per state
+        .background(tint.opacity(0.16))
         .animation(.easeInOut(duration: 0.25), value: flash)
         .environment(\.colorScheme, .dark)
+    }
+}
+
+// MARK: - Live activity (persistent)
+
+struct NotchActivityView: View {
+    let kind: LiveActivityKind
+    let notchWidth: CGFloat
+
+    var body: some View {
+        switch kind {
+        case .nowPlaying: NowPlayingActivity(notchWidth: notchWidth)
+        case .timer:      TimerActivity(notchWidth: notchWidth)
+        }
+    }
+}
+
+/// Album art hugging the left of the notch, an animated equalizer on the right.
+struct NowPlayingActivity: View {
+    @State private var media = MediaController.shared
+    let notchWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 0) {
+            art
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Spacer().frame(width: notchWidth)
+            Equalizer(active: media.isPlaying)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxHeight: .infinity)
+    }
+
+    private var art: some View {
+        Group {
+            if let image = media.artwork ?? media.appIcon {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Image(systemName: "music.note").font(.system(size: 9)).foregroundStyle(.white)
+                }
+            }
+        }
+        .frame(width: 20, height: 20)
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+}
+
+/// A small bouncing 3-bar equalizer (flat when paused).
+struct Equalizer: View {
+    let active: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !active)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: 2.5) {
+                ForEach(0..<3, id: \.self) { i in
+                    Capsule()
+                        .fill(.white.opacity(0.9))
+                        .frame(width: 2.5, height: barHeight(t, i))
+                }
+            }
+            .frame(height: 16, alignment: .center)
+        }
+    }
+
+    private func barHeight(_ t: Double, _ i: Int) -> CGFloat {
+        guard active else { return 3 }
+        let phase = Double(i) * 1.15
+        return 3 + 11 * (0.5 + 0.5 * sin(t * 6.5 + phase))
+    }
+}
+
+/// Countdown on the right of the notch (see TimerManager). Placeholder until the
+/// timer feature is wired; currently shows a static ring + time.
+struct TimerActivity: View {
+    let notchWidth: CGFloat
+    var body: some View {
+        HStack(spacing: 0) {
+            Image(systemName: "timer")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Spacer().frame(width: notchWidth)
+            Text("")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxHeight: .infinity)
     }
 }
 
