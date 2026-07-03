@@ -23,7 +23,6 @@ struct ControlView: View {
     private enum Expanded: Equatable { case wifi, bluetooth }
     @State private var panel: Panel = .none
     @State private var expanded: Expanded?
-    @State private var cursorPushed = false
     @Namespace private var tileNS
 
     var body: some View {
@@ -36,16 +35,6 @@ struct ControlView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.snappy(duration: 0.22), value: panel)
-        // Force the normal arrow cursor over the whole tab (SwiftUI otherwise
-        // shows an I-beam over some of the hosted content). Track the push so we
-        // never pop unbalanced when the view disappears mid-hover.
-        .onHover { inside in
-            if inside, !cursorPushed { NSCursor.arrow.push(); cursorPushed = true }
-            else if !inside, cursorPushed { NSCursor.pop(); cursorPushed = false }
-        }
-        .onDisappear {
-            if cursorPushed { NSCursor.pop(); cursorPushed = false }
-        }
         .task {
             audio.refresh()
             while !Task.isCancelled {

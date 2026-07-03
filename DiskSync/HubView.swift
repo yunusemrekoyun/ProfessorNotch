@@ -44,6 +44,7 @@ struct HubView: View {
     @State private var battery = BatteryManager.shared
     @State private var prefs = Preferences.shared
     @State private var hoveredTab: HubTab?
+    @State private var cursorPushed = false
     @Environment(\.openSettings) private var openSettings
 
     /// Height of the physical notch band; tab icons sit within it (beside the
@@ -82,6 +83,16 @@ struct HubView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.colorScheme, .dark)
+        // Force the normal arrow cursor across the entire notch panel (every
+        // tab), so SwiftUI text never flips the cursor to a text I-beam. Nested
+        // controls (e.g. the album-art pointing hand) still win while hovered.
+        .onHover { inside in
+            if inside, !cursorPushed { NSCursor.arrow.push(); cursorPushed = true }
+            else if !inside, cursorPushed { NSCursor.pop(); cursorPushed = false }
+        }
+        .onDisappear {
+            if cursorPushed { NSCursor.pop(); cursorPushed = false }
+        }
         .task { await app.bootstrap() }
     }
 
