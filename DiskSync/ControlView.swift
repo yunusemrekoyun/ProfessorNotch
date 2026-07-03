@@ -234,8 +234,9 @@ struct ControlView: View {
         let enabled = (e == .wifi) ? net.wifiAvailable : net.bluetoothToggleable
         return HStack(spacing: 10) {
             Toggle("", isOn: Binding(get: { on }, set: { setPower(e, $0) }))
-                .toggleStyle(.switch).labelsHidden().disabled(!enabled)
-                .tint(.green)   // green when on, gray when off
+                .labelsHidden()
+                .toggleStyle(SwitchToggleStyle(tint: .green))   // green on, gray off
+                .disabled(!enabled)
             Text(on ? "On" : "Off").font(.caption.weight(.medium)).foregroundStyle(.secondary)
             Spacer(minLength: 4)
             Button { openToggleSettings(e) } label: {
@@ -428,13 +429,17 @@ struct BluetoothLogo: Shape {
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
             CGPoint(x: rect.minX + x * rect.width, y: rect.minY + y * rect.height)
         }
+        let top = p(0.5, 0.06), bottom = p(0.5, 0.94), center = p(0.5, 0.5)
         var path = Path()
-        path.move(to: p(0.34, 0.26))
-        path.addLine(to: p(0.66, 0.74))
-        path.addLine(to: p(0.50, 0.90))
-        path.addLine(to: p(0.50, 0.10))
-        path.addLine(to: p(0.66, 0.26))
-        path.addLine(to: p(0.34, 0.74))
+        // Vertical spine.
+        path.move(to: top); path.addLine(to: bottom)
+        // Upper-right triangle: top tip → upper knee → center.
+        path.move(to: top); path.addLine(to: p(0.80, 0.28)); path.addLine(to: center)
+        // Lower-right triangle: center → lower knee → bottom tip.
+        path.move(to: center); path.addLine(to: p(0.80, 0.72)); path.addLine(to: bottom)
+        // Left diagonals crossing to the center.
+        path.move(to: p(0.20, 0.30)); path.addLine(to: center)
+        path.move(to: p(0.20, 0.70)); path.addLine(to: center)
         return path
     }
 }
