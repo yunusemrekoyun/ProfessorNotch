@@ -2,12 +2,11 @@
 //  ControlView.swift
 //  ProfessorNotch
 //
-//  The Control tab — a compact mini Control-Center in the notch. Top: a
-//  now-playing strip (no scrubber). Middle: brightness + volume sliders with a
-//  visible output-device button. Bottom: four quick-toggle tiles. Wi-Fi and
-//  Bluetooth expand a simple inline on/off + Settings row right below the tiles;
-//  the output picker and Displays open a sliding detail panel. The whole thing
-//  scrolls (top-anchored) so it never clips at the standard HUD height.
+//  The Control tab — a compact mini Control-Center in the notch. Left: a
+//  now-playing card. Right: vertical volume + brightness sliders with an output
+//  device chip. Bottom: four quick-toggle tiles; Wi-Fi and Bluetooth expand a
+//  simple inline on/off + Settings row right below. Everything fits the standard
+//  HUD height (a ScrollView is only a safety net when a toggle is expanded).
 //
 
 import SwiftUI
@@ -54,8 +53,11 @@ struct ControlView: View {
     private var home: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 10) {
-                musicStrip
-                slidersRow
+                HStack(alignment: .top, spacing: 10) {
+                    musicCard
+                    rightColumn.frame(width: 118)
+                }
+                .frame(height: 108)
                 togglesRow
                 if let expanded {
                     inlineToggle(expanded)
@@ -67,45 +69,48 @@ struct ControlView: View {
         .animation(.snappy(duration: 0.22), value: expanded)
     }
 
-    // MARK: - Now playing (top strip)
+    // MARK: - Now playing (left card)
 
-    private var musicStrip: some View {
+    private var musicCard: some View {
         Group {
             if media.automationDenied {
-                HStack(spacing: 10) {
+                VStack(spacing: 7) {
                     Image(systemName: "lock.shield").font(.title3).foregroundStyle(.secondary)
-                    Text("Allow media control to see what's playing.")
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    Spacer(minLength: 4)
-                    Button("Settings") { media.openAutomationSettings() }
+                    Text("Allow media control").font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Open Settings") { media.openAutomationSettings() }
                         .buttonStyle(.glass).font(.caption2)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if media.hasTrack {
-                HStack(spacing: 10) {
-                    artwork
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(media.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                        Text(media.artist.isEmpty ? media.source.displayName : media.artist)
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                VStack(spacing: 10) {
+                    HStack(spacing: 12) {
+                        artwork
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(media.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text(media.artist.isEmpty ? media.source.displayName : media.artist)
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 6)
-                    HStack(spacing: 14) {
-                        transport("backward.fill", size: 13) { await media.previous() }
-                        transport(media.isPlaying ? "pause.fill" : "play.fill", size: 20) { await media.playPause() }
-                        transport("forward.fill", size: 13) { await media.next() }
+                    HStack(spacing: 26) {
+                        transport("backward.fill", size: 15) { await media.previous() }
+                        transport(media.isPlaying ? "pause.fill" : "play.fill", size: 22) { await media.playPause() }
+                        transport("forward.fill", size: 15) { await media.next() }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                HStack(spacing: 10) {
-                    Image(systemName: "music.note").font(.title3).foregroundStyle(.secondary)
-                    Text("Nothing playing").font(.callout).foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
+                VStack(spacing: 6) {
+                    Image(systemName: "music.note").font(.title2).foregroundStyle(.secondary)
+                    Text("Nothing playing").font(.caption).foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(height: 52)
-        .padding(.horizontal, 12)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(12)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var artwork: some View {
@@ -121,8 +126,8 @@ struct ControlView: View {
                 }
             }
         }
-        .frame(width: 42, height: 42)
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .frame(width: 48, height: 48)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
         .onTapGesture { if media.hasTrack { Haptics.select(); media.openSourceApp() } }
         .help("Open in \(media.source.displayName)")
@@ -139,17 +144,18 @@ struct ControlView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Sliders + output
+    // MARK: - Sliders + output (right column)
 
-    private var slidersRow: some View {
+    private var rightColumn: some View {
         VStack(spacing: 8) {
-            if brightness.isAvailable {
-                CCSlider(value: brightness.level ?? 0, icon: "sun.max.fill") { brightness.set($0) }
-            }
             HStack(spacing: 8) {
-                CCSlider(value: media.volume, icon: volumeIcon) { media.setVolume($0) }
-                outputButton
+                VSlider(value: media.volume, icon: volumeIcon) { media.setVolume($0) }
+                if brightness.isAvailable {
+                    VSlider(value: brightness.level ?? 0, icon: "sun.max.fill") { brightness.set($0) }
+                }
             }
+            .frame(maxHeight: .infinity)
+            outputChip
         }
     }
 
@@ -164,14 +170,17 @@ struct ControlView: View {
         audio.outputs.first { $0.id == audio.currentID }?.name ?? "Output"
     }
 
-    private var outputButton: some View {
+    private var outputChip: some View {
         Button { audio.refresh(); panel = .audio } label: {
-            Image(systemName: "hifispeaker.and.appletv")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: 42, height: 30)
-                .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .contentShape(Rectangle())
+            HStack(spacing: 5) {
+                Image(systemName: "hifispeaker.and.appletv").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(currentOutputName).font(.system(size: 10, weight: .medium)).foregroundStyle(.white).lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8).frame(height: 26).frame(maxWidth: .infinity)
+            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("Output: \(currentOutputName)")
@@ -328,34 +337,33 @@ struct ControlView: View {
     }
 }
 
-/// A Control-Center-style horizontal slider: a rounded capsule that fills from
-/// the left as you drag, with the level icon inside on the leading edge.
-struct CCSlider: View {
+/// A Control-Center-style vertical slider: a rounded bar that fills from the
+/// bottom as you drag, with the level icon near the base.
+struct VSlider: View {
     let value: Double
     let icon: String
     let onChange: (Double) -> Void
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
-            let fill = min(w, max(0, w * value))
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.16))
-                Capsule().fill(.white).frame(width: fill)
+            let h = geo.size.height
+            let fill = min(h, max(0, h * value))
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.16))
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white).frame(height: fill)
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(value > 0.14 ? Color.black.opacity(0.55) : .white.opacity(0.85))
-                    .padding(.leading, 11)
+                    .padding(.bottom, 8)
                     .animation(.easeInOut(duration: 0.15), value: fill)
             }
-            .frame(height: 28)
-            .clipShape(Capsule())
-            .contentShape(Capsule())
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { g in onChange(min(1, max(0, g.location.x / w))) }
+                    .onChanged { g in onChange(min(1, max(0, 1 - g.location.y / h))) }
             )
         }
-        .frame(height: 28)
+        .frame(maxWidth: .infinity)
     }
 }
