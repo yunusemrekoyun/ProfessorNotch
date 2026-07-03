@@ -77,7 +77,7 @@ struct NotchShell: View {
         let flashWidth = min(geometry.panelWidth, geometry.notchWidth + 200)
         let activityWidth = min(geometry.panelWidth, geometry.notchWidth + 132)
         let slimWidth = isFlash ? flashWidth : activityWidth
-        let slimHeight = geometry.notchHeight + 6
+        let slimHeight = geometry.notchHeight   // exactly notch height; grows sideways only
 
         let width = isFull ? geometry.panelWidth : (slim ? slimWidth : geometry.notchWidth)
         let height = isFull ? geometry.panelHeight : (slim ? slimHeight : geometry.notchHeight)

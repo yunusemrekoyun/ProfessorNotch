@@ -18,8 +18,9 @@ struct ControlView: View {
     @State private var net = ConnectivityManager.shared
     @State private var appearance = AppearanceManager.shared
     @State private var displays = DisplaysManager.shared
+    @State private var timerManager = TimerManager.shared
 
-    private enum Panel: Equatable { case none, audio, displays }
+    private enum Panel: Equatable { case none, audio, displays, timer }
     private enum Expanded: Equatable { case wifi, bluetooth }
     @State private var panel: Panel = .none
     @State private var expanded: Expanded?
@@ -31,6 +32,7 @@ struct ControlView: View {
             case .none:     home
             case .audio:    audioPanel.padding(12)
             case .displays: displaysPanel.padding(12)
+            case .timer:    timerPanel.padding(12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -53,7 +55,11 @@ struct ControlView: View {
     // MARK: - Home
 
     private var home: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
+            HStack {
+                timerChip
+                Spacer(minLength: 0)
+            }
             HStack(alignment: .top, spacing: 10) {
                 musicCard
                 rightColumn.frame(width: 118)
@@ -61,7 +67,29 @@ struct ControlView: View {
             .frame(maxHeight: .infinity)
             togglesRow
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    /// Top-left timer button; shows the countdown when running. Opens a panel to
+    /// pick a duration (like the output-device picker).
+    private var timerChip: some View {
+        Button { Haptics.button(); panel = .timer } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "timer").font(.system(size: 12, weight: .semibold))
+                if timerManager.isRunning {
+                    Text(timerManager.displayString)
+                        .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                }
+            }
+            .foregroundStyle(timerManager.isRunning ? Color.green : .secondary)
+            .padding(.horizontal, 9).frame(height: 22)
+            .background(.white.opacity(0.08), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .hapticHover()
+        .help("Timer")
     }
 
     // MARK: - Now playing (left card)
@@ -342,6 +370,38 @@ struct ControlView: View {
                 }
             }
             .frame(maxHeight: .infinity)
+        }
+    }
+
+    private var timerPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            panelHeader("Timer")
+            if timerManager.isRunning {
+                VStack(spacing: 12) {
+                    Text(timerManager.displayString)
+                        .font(.system(size: 38, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(timerManager.isPaused ? Color.secondary : Color.white)
+                    HStack(spacing: 10) {
+                        Button(timerManager.isPaused ? "Resume" : "Pause") {
+                            Haptics.button()
+                            if timerManager.isPaused { timerManager.resume() } else { timerManager.pause() }
+                        }
+                        .buttonStyle(.glass).hapticHover()
+                        Button("Stop", role: .destructive) { Haptics.button(); timerManager.cancel() }
+                            .buttonStyle(.bordered).hapticHover()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 66), spacing: 8)], spacing: 8) {
+                    ForEach([1, 5, 10, 15, 25, 45], id: \.self) { m in
+                        Button("\(m) min") { Haptics.button(); timerManager.start(minutes: Double(m)) }
+                            .buttonStyle(.bordered).hapticHover()
+                    }
+                }
+                Spacer(minLength: 0)
+            }
         }
     }
 
