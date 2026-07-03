@@ -2,10 +2,10 @@
 //  ControlView.swift
 //  ProfessorNotch
 //
-//  The Control tab — a mini Control-Center in the notch. Left: a compact
-//  now-playing mini-player (no scrubber). Right: vertical volume + brightness
-//  sliders. Bottom: four round quick toggles (Wi-Fi, Bluetooth, Dark Mode,
-//  Displays). Tapping a toggle or the speaker icon slides in a detail panel.
+//  The Control tab — a mini Control-Center in the notch. Left: a now-playing
+//  card (no scrubber). Right: brightness + volume sliders and a tappable output
+//  device chip. Bottom: four quick-toggle tiles (Wi-Fi, Bluetooth, Dark Mode,
+//  Displays). Tapping the output chip or a toggle slides in a detail panel.
 //
 
 import SwiftUI
@@ -34,7 +34,7 @@ struct ControlView: View {
         .padding(12)
         .animation(.snappy(duration: 0.22), value: panel)
         .task {
-            // Snapshot system state on open, then keep it fresh while visible.
+            audio.refresh()
             while !Task.isCancelled {
                 await media.refresh(); refreshSystem()
                 try? await Task.sleep(for: media.hasTrack ? .seconds(1.5) : .seconds(4))
@@ -45,32 +45,32 @@ struct ControlView: View {
     private var move: AnyTransition { .move(edge: .trailing).combined(with: .opacity) }
 
     private func refreshSystem() {
-        brightness.refresh(); net.refresh(); appearance.refresh()
+        brightness.refresh(); net.refresh(); appearance.refresh(); audio.refresh()
         if panel == .displays { displays.refresh() }
     }
 
     // MARK: - Home
 
     private var home: some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                miniPlayer
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                sliders
+        VStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                nowPlayingCard
+                rightControls.frame(width: 208)
             }
             .frame(maxHeight: .infinity)
-            quickToggles
+            togglesRow
         }
     }
 
-    // MARK: - Mini player (left)
+    // MARK: - Now playing (left card)
 
-    private var miniPlayer: some View {
+    private var nowPlayingCard: some View {
         Group {
             if media.automationDenied {
-                deniedPlayer
+                cardEmpty(icon: "lock.shield", title: "Allow media control",
+                          action: ("Open Settings", { media.openAutomationSettings() }))
             } else if media.hasTrack {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         artwork
                         VStack(alignment: .leading, spacing: 2) {
@@ -79,17 +79,21 @@ struct ControlView: View {
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
-                    HStack(spacing: 22) {
+                    HStack(spacing: 26) {
                         transport("backward.fill") { await media.previous() }
-                        transport(media.isPlaying ? "pause.fill" : "play.fill", size: 24) { await media.playPause() }
+                        transport(media.isPlaying ? "pause.fill" : "play.fill", size: 22) { await media.playPause() }
                         transport("forward.fill") { await media.next() }
                     }
                     .frame(maxWidth: .infinity)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             } else {
-                emptyPlayer
+                cardEmpty(icon: "music.note", title: "Nothing playing", action: nil)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(12)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var artwork: some View {
@@ -105,61 +109,46 @@ struct ControlView: View {
                 }
             }
         }
-        .frame(width: 52, height: 52)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: 54, height: 54)
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
         .onTapGesture { if media.hasTrack { Haptics.select(); media.openSourceApp() } }
         .help("Open in \(media.source.displayName)")
     }
 
-    private var emptyPlayer: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "music.note").font(.title2).foregroundStyle(.secondary)
-            Text("Nothing playing").font(.caption).foregroundStyle(.secondary)
+    private func cardEmpty(icon: String, title: String, action: (String, () -> Void)?) -> some View {
+        VStack(spacing: 7) {
+            Image(systemName: icon).font(.title2).foregroundStyle(.secondary)
+            Text(title).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            if let action {
+                Button(action.0, action: action.1).buttonStyle(.glass).font(.caption2)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var deniedPlayer: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "lock.shield").font(.title3).foregroundStyle(.secondary)
-            Text("Allow media control").font(.caption).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Settings") { media.openAutomationSettings() }
-                .buttonStyle(.glass).font(.caption2)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func transport(_ symbol: String, size: CGFloat = 17, action: @escaping () async -> Void) -> some View {
+    private func transport(_ symbol: String, size: CGFloat = 16, action: @escaping () async -> Void) -> some View {
         Button { Task { await action() } } label: {
             Image(systemName: symbol)
                 .font(.system(size: size))
                 .foregroundStyle(.white)
-                .frame(width: size + 10, height: size + 10)
+                .frame(width: size + 12, height: size + 12)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Sliders (right)
+    // MARK: - Sliders + output (right column)
 
-    private var sliders: some View {
-        HStack(spacing: 10) {
-            VControlSlider(value: media.volume, systemImage: volumeIcon) { media.setVolume($0) }
-                .overlay(alignment: .top) {
-                    // Tap the speaker cap to pick the output device.
-                    Button { audio.refresh(); panel = .audio } label: {
-                        Color.clear.frame(height: 26).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Output device")
-                }
+    private var rightControls: some View {
+        VStack(spacing: 8) {
             if brightness.isAvailable {
-                VControlSlider(value: brightness.level ?? 0, systemImage: "sun.max.fill") { brightness.set($0) }
+                CCSlider(value: brightness.level ?? 0, icon: "sun.max.fill") { brightness.set($0) }
             }
+            CCSlider(value: media.volume, icon: volumeIcon) { media.setVolume($0) }
+            outputChip
         }
-        .frame(width: brightness.isAvailable ? 96 : 44)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var volumeIcon: String {
@@ -169,38 +158,59 @@ struct ControlView: View {
         return "speaker.wave.3.fill"
     }
 
-    // MARK: - Quick toggles (bottom)
-
-    private var quickToggles: some View {
-        HStack(spacing: 14) {
-            toggleButton(icon: net.wifiOn ? "wifi" : "wifi.slash",
-                         on: net.wifiOn, label: "Wi-Fi") { panel = .wifi }
-            toggleButton(icon: "dot.radiowaves.right",
-                         on: net.bluetoothOn, label: "Bluetooth") { panel = .bluetooth }
-            toggleButton(icon: appearance.isDark ? "moon.fill" : "sun.max.fill",
-                         on: appearance.isDark, label: "Appearance") { Haptics.select(); appearance.toggle() }
-            toggleButton(icon: "display", on: false, label: "Displays") {
-                displays.refresh(); panel = .displays
-            }
-        }
-        .frame(maxWidth: .infinity)
+    private var currentOutputName: String {
+        audio.outputs.first { $0.id == audio.currentID }?.name ?? "Output"
     }
 
-    private func toggleButton(icon: String, on: Bool, label: String, action: @escaping () -> Void) -> some View {
-        VStack(spacing: 4) {
-            Button(action: action) {
+    private var outputChip: some View {
+        Button { audio.refresh(); panel = .audio } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "hifispeaker.and.appletv").font(.system(size: 13)).foregroundStyle(.secondary)
+                Text(currentOutputName).font(.caption.weight(.medium)).foregroundStyle(.white).lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10).frame(height: 30)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Output device")
+    }
+
+    // MARK: - Quick toggles (bottom)
+
+    private var togglesRow: some View {
+        HStack(spacing: 8) {
+            tile(icon: net.wifiOn ? "wifi" : "wifi.slash", label: "Wi-Fi",
+                 on: net.wifiOn) { panel = .wifi }
+            tile(icon: "dot.radiowaves.right", label: "Bluetooth",
+                 on: net.bluetoothOn) { panel = .bluetooth }
+            tile(icon: appearance.isDark ? "moon.fill" : "sun.max.fill", label: "Appearance",
+                 on: appearance.isDark) { Haptics.select(); appearance.toggle() }
+            tile(icon: "display", label: "Displays",
+                 on: false) { displays.refresh(); panel = .displays }
+        }
+    }
+
+    private func tile(icon: String, label: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(on ? .white : .secondary)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 34, height: 34)
                     .background {
                         Circle().fill(on ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.white.opacity(0.14)))
                     }
-                    .contentShape(Circle())
+                Text(label).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
             }
-            .buttonStyle(.plain)
-            Text(label).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Detail panels
@@ -234,7 +244,7 @@ struct ControlView: View {
                                     Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
                                 }
                             }
-                            .padding(.vertical, 5).padding(.horizontal, 8)
+                            .padding(.vertical, 6).padding(.horizontal, 8)
                             .background(device.id == audio.currentID ? AnyShapeStyle(.white.opacity(0.08)) : AnyShapeStyle(.clear),
                                         in: RoundedRectangle(cornerRadius: 8))
                             .contentShape(Rectangle())
@@ -248,7 +258,7 @@ struct ControlView: View {
     }
 
     private var wifiPanel: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             panelHeader("Wi-Fi")
             Toggle("Wi-Fi", isOn: Binding(get: { net.wifiOn }, set: { net.setWiFi($0) }))
                 .toggleStyle(.switch)
@@ -262,7 +272,7 @@ struct ControlView: View {
     }
 
     private var bluetoothPanel: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             panelHeader("Bluetooth")
             Toggle("Bluetooth", isOn: Binding(get: { net.bluetoothOn }, set: { net.setBluetooth($0) }))
                 .toggleStyle(.switch)
@@ -282,7 +292,7 @@ struct ControlView: View {
         VStack(alignment: .leading, spacing: 8) {
             panelHeader("Displays")
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     ForEach(displays.displays) { d in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -290,7 +300,7 @@ struct ControlView: View {
                                     .foregroundStyle(.secondary)
                                 Text(d.name).font(.callout.weight(.medium)).lineLimit(1)
                                 Spacer()
-                                Text(d.isMain ? "Main" : "").font(.caption2).foregroundStyle(.secondary)
+                                if d.isMain { Text("Main").font(.caption2).foregroundStyle(.secondary) }
                             }
                             Text("\(d.resolutionText)\(d.refreshHz > 0 ? " · \(d.refreshHz) Hz" : "")")
                                 .font(.caption2).foregroundStyle(.secondary)
@@ -303,7 +313,7 @@ struct ControlView: View {
                                 }
                             }
                         }
-                        .padding(8)
+                        .padding(10)
                         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
@@ -313,34 +323,34 @@ struct ControlView: View {
     }
 }
 
-/// A Control-Center-style vertical slider: a rounded bar that fills from the
-/// bottom as you drag, with a level icon near the base.
-struct VControlSlider: View {
+/// A Control-Center-style horizontal slider: a rounded capsule that fills from
+/// the left as you drag, with the level icon inside on the leading edge.
+struct CCSlider: View {
     let value: Double
-    let systemImage: String
+    let icon: String
     let onChange: (Double) -> Void
 
     var body: some View {
         GeometryReader { geo in
-            let h = geo.size.height
-            let fill = min(h, max(0, h * value))
-            ZStack(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.16))
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white)
-                    .frame(height: fill)
-                Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .semibold))
+            let w = geo.size.width
+            let fill = min(w, max(0, w * value))
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.16))
+                Capsule().fill(.white).frame(width: fill)
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(value > 0.14 ? Color.black.opacity(0.55) : .white.opacity(0.85))
-                    .padding(.bottom, 9)
+                    .padding(.leading, 11)
                     .animation(.easeInOut(duration: 0.15), value: fill)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .contentShape(Rectangle())
+            .frame(height: 30)
+            .clipShape(Capsule())
+            .contentShape(Capsule())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { g in onChange(min(1, max(0, 1 - g.location.y / h))) }
+                    .onChanged { g in onChange(min(1, max(0, g.location.x / w))) }
             )
         }
-        .frame(width: 42)
+        .frame(height: 30)
     }
 }
