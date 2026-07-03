@@ -2,10 +2,11 @@
 //  ControlView.swift
 //  ProfessorNotch
 //
-//  The Control tab — a mini Control-Center in the notch. Left: a now-playing
-//  card (no scrubber). Right: brightness + volume sliders and a tappable output
-//  device chip. Bottom: four quick-toggle tiles (Wi-Fi, Bluetooth, Dark Mode,
-//  Displays). Tapping the output chip or a toggle slides in a detail panel.
+//  The Control tab — a compact mini Control-Center in the notch that fits the
+//  same HUD height as every other tab. Top: a now-playing strip (no scrubber).
+//  Middle: brightness + volume sliders with a visible output-device button.
+//  Bottom: four quick-toggle tiles (Wi-Fi, Bluetooth, Dark Mode, Displays).
+//  Tapping the output button or a toggle slides in a detail panel.
 //
 
 import SwiftUI
@@ -52,48 +53,53 @@ struct ControlView: View {
     // MARK: - Home
 
     private var home: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                nowPlayingCard
-                controlsCard.frame(width: 214)
-            }
-            .frame(maxHeight: .infinity)
+        VStack(spacing: 9) {
+            musicStrip
+            slidersRow
+            Spacer(minLength: 2)
             togglesRow
         }
     }
 
-    // MARK: - Now playing (left card)
+    // MARK: - Now playing (top strip)
 
-    private var nowPlayingCard: some View {
+    private var musicStrip: some View {
         Group {
             if media.automationDenied {
-                cardEmpty(icon: "lock.shield", title: "Allow media control",
-                          action: ("Open Settings", { media.openAutomationSettings() }))
+                HStack(spacing: 10) {
+                    Image(systemName: "lock.shield").font(.title3).foregroundStyle(.secondary)
+                    Text("Allow media control to see what's playing.")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Spacer(minLength: 4)
+                    Button("Settings") { media.openAutomationSettings() }
+                        .buttonStyle(.glass).font(.caption2)
+                }
             } else if media.hasTrack {
-                VStack(spacing: 14) {
-                    HStack(spacing: 10) {
-                        artwork
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(media.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                            Text(media.artist.isEmpty ? media.source.displayName : media.artist)
-                                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
+                HStack(spacing: 10) {
+                    artwork
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(media.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text(media.artist.isEmpty ? media.source.displayName : media.artist)
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    HStack(spacing: 28) {
-                        transport("backward.fill") { await media.previous() }
-                        transport(media.isPlaying ? "pause.fill" : "play.fill", size: 24) { await media.playPause() }
-                        transport("forward.fill") { await media.next() }
+                    Spacer(minLength: 6)
+                    HStack(spacing: 14) {
+                        transport("backward.fill", size: 13) { await media.previous() }
+                        transport(media.isPlaying ? "pause.fill" : "play.fill", size: 20) { await media.playPause() }
+                        transport("forward.fill", size: 13) { await media.next() }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                cardEmpty(icon: "music.note", title: "Nothing playing", action: nil)
+                HStack(spacing: 10) {
+                    Image(systemName: "music.note").font(.title3).foregroundStyle(.secondary)
+                    Text("Nothing playing").font(.callout).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(12)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(height: 52)
+        .padding(.horizontal, 12)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var artwork: some View {
@@ -109,22 +115,11 @@ struct ControlView: View {
                 }
             }
         }
-        .frame(width: 54, height: 54)
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+        .frame(width: 42, height: 42)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
         .onTapGesture { if media.hasTrack { Haptics.select(); media.openSourceApp() } }
         .help("Open in \(media.source.displayName)")
-    }
-
-    private func cardEmpty(icon: String, title: String, action: (String, () -> Void)?) -> some View {
-        VStack(spacing: 7) {
-            Image(systemName: icon).font(.title2).foregroundStyle(.secondary)
-            Text(title).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            if let action {
-                Button(action.0, action: action.1).buttonStyle(.glass).font(.caption2)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func transport(_ symbol: String, size: CGFloat = 16, action: @escaping () async -> Void) -> some View {
@@ -138,28 +133,17 @@ struct ControlView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Sliders + output (right column)
+    // MARK: - Sliders + output
 
-    private var controlsCard: some View {
-        VStack(spacing: 12) {
+    private var slidersRow: some View {
+        VStack(spacing: 8) {
             if brightness.isAvailable {
-                labeledSlider(icon: "sun.max.fill", title: "Brightness",
-                              value: brightness.level ?? 0) { brightness.set($0) }
+                CCSlider(value: brightness.level ?? 0, icon: "sun.max.fill") { brightness.set($0) }
             }
-            labeledSlider(icon: volumeIcon, title: "Volume",
-                          value: media.volume) { media.setVolume($0) }
-            outputChip
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(12)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func labeledSlider(icon: String, title: String, value: Double,
-                               onChange: @escaping (Double) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-            CCSlider(value: value, icon: icon, onChange: onChange)
+            HStack(spacing: 8) {
+                CCSlider(value: media.volume, icon: volumeIcon) { media.setVolume($0) }
+                outputButton
+            }
         }
     }
 
@@ -174,20 +158,17 @@ struct ControlView: View {
         audio.outputs.first { $0.id == audio.currentID }?.name ?? "Output"
     }
 
-    private var outputChip: some View {
+    private var outputButton: some View {
         Button { audio.refresh(); panel = .audio } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "hifispeaker.and.appletv").font(.system(size: 13)).foregroundStyle(.secondary)
-                Text(currentOutputName).font(.caption.weight(.medium)).foregroundStyle(.white).lineLimit(1)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10).frame(height: 30)
-            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(Rectangle())
+            Image(systemName: "hifispeaker.and.appletv")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 42, height: 30)
+                .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Output device")
+        .help("Output: \(currentOutputName)")
     }
 
     // MARK: - Quick toggles (bottom)
@@ -207,18 +188,18 @@ struct ControlView: View {
 
     private func tile(icon: String, label: String, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 5) {
+            VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(on ? .white : .secondary)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 32, height: 32)
                     .background {
                         Circle().fill(on ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.white.opacity(0.14)))
                     }
                 Text(label).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -355,7 +336,7 @@ struct CCSlider: View {
                     .padding(.leading, 11)
                     .animation(.easeInOut(duration: 0.15), value: fill)
             }
-            .frame(height: 30)
+            .frame(height: 28)
             .clipShape(Capsule())
             .contentShape(Capsule())
             .gesture(
@@ -363,6 +344,6 @@ struct CCSlider: View {
                     .onChanged { g in onChange(min(1, max(0, g.location.x / w))) }
             )
         }
-        .frame(height: 30)
+        .frame(height: 28)
     }
 }
